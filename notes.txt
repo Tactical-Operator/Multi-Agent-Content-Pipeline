@@ -1,0 +1,31 @@
+com.contentforge.backend
+│
+├── controller/
+│
+├── agent/
+│   ├── ResearcherAgent.java
+│   ├── WriterAgent.java
+│   ├── FactCheckerAgent.java
+│   └── EditorAgent.java
+│
+├── model/
+│   ├── ResearchResult.java
+│   ├── DraftContent.java
+│   ├── FactCheckResult.java
+│   └── EditorResult.java
+│
+├── orchestration/
+│   └── PipelineOrchestrator.java
+│
+├── tool/
+│   ├── WebSearchTool.java
+│   └── KnowledgeBaseTool.java
+│
+├── rag/
+│
+├── entity/
+├── repository/
+├── service/
+└── BackendApplication.java
+
+Structure decided , may vary later 
