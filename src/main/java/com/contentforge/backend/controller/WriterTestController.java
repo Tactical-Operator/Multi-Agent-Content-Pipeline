@@ -1,93 +1,97 @@
+
 package com.contentforge.backend.controller;
 
-import com.contentforge.backend.agent.EditorAgent;
-import com.contentforge.backend.agent.FactCheckerAgent;
-import com.contentforge.backend.agent.ResearcherAgent;
-import com.contentforge.backend.agent.WriterAgent;
-
-import com.contentforge.backend.model.EditorResult;
-import com.contentforge.backend.model.FactCheckResult;
-import com.contentforge.backend.model.ResearchResult;
-import com.contentforge.backend.model.WriterResult;
-import com.contentforge.backend.model.WriterTestResult;
+import com.contentforge.backend.model.PipelineResult;
+import com.contentforge.backend.service.PipelineOrchestrator;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/*
+ * WriterTestController
+ *
+ * PURPOSE:
+ * Receives HTTP requests from the user and passes
+ * the content requirements to PipelineOrchestrator.
+ *
+ * The controller no longer directly executes
+ * the four AI agents.
+ *
+ * PipelineOrchestrator is responsible for:
+ *
+ * 1. Research
+ * 2. Writing
+ * 3. Fact-checking
+ * 4. Editing
+ * 5. Automatic revisions
+ */
 @RestController
 @RequestMapping("/api/write")
 public class WriterTestController {
 
-    private final ResearcherAgent researcherAgent;
-    private final WriterAgent writerAgent;
-    private final FactCheckerAgent factCheckerAgent;
-    private final EditorAgent editorAgent;
+    /*
+     * Reference to the PipelineOrchestrator object.
+     *
+     * Spring provides this object through
+     * constructor dependency injection.
+     */
+    private final PipelineOrchestrator pipelineOrchestrator;
 
+    /*
+     * Constructor
+     *
+     * Spring injects the PipelineOrchestrator bean.
+     */
     public WriterTestController(
-            ResearcherAgent researcherAgent,
-            WriterAgent writerAgent,
-            FactCheckerAgent factCheckerAgent,
-            EditorAgent editorAgent) {
+            PipelineOrchestrator pipelineOrchestrator) {
 
-        this.researcherAgent = researcherAgent;
-        this.writerAgent = writerAgent;
-        this.factCheckerAgent = factCheckerAgent;
-        this.editorAgent = editorAgent;
+        this.pipelineOrchestrator = pipelineOrchestrator;
     }
 
-    @GetMapping 
-    public WriterTestResult write( 
-            // @RequestParam will strip the data after ?
+    /*
+     * GET /api/write
+     *
+     * Receives content generation requirements
+     * through URL query parameters.
+     *
+     * Example:
+     *
+     * /api/write?topic=Java&platform=LinkedIn
+     * &format=Post&audience=Developers&tone=Professional
+     */
+    @GetMapping
+    public PipelineResult write(
+
             @RequestParam String topic,
+
             @RequestParam String platform,
+
             @RequestParam String format,
+
             @RequestParam String audience,
+
             @RequestParam String tone,
+
             @RequestParam(defaultValue = "")
             String additionalInstructions) {
 
-        // Agent 1: Research
-        ResearchResult research =
-                researcherAgent.research(topic);
-
-        // Agent 2: Write
-        WriterResult writtenContent =
-                writerAgent.write(
-                        topic,
-                        platform,
-                        format,
-                        audience,
-                        tone,
-                        additionalInstructions,
-                        research
-                );
-
-        // Agent 3: Fact-check
-        FactCheckResult factCheck =
-                factCheckerAgent.check(
-                        research,
-                        writtenContent
-                );
-
-        // Agent 4: Final review
-        EditorResult editorReview =
-                editorAgent.review(
-                        platform,
-                        format,
-                        audience,
-                        tone,
-                        additionalInstructions,
-                        writtenContent,
-                        factCheck
-                );
-
-        return new WriterTestResult(
-                research,
-                writtenContent,
-                factCheck,
-                editorReview
+        /*
+         * Pass all the user inputs to the orchestrator.
+         *
+         * The orchestrator executes the four agents
+         * and handles any required revisions.
+         *
+         * It returns one PipelineResult object.
+         */
+        return pipelineOrchestrator.generate(
+                topic,
+                platform,
+                format,
+                audience,
+                tone,
+                additionalInstructions
         );
     }
 }
