@@ -94,4 +94,103 @@ public class WriterAgent {
                 .entity(WriterResult.class);
     }
 
+    
+/*
+ * revise()
+ *
+ * PURPOSE:
+ * Revise previously generated content using feedback
+ * from the Editor Agent and Fact Checker Agent.
+ *
+ * INPUT:
+ * - Original user requirements
+ * - ResearchResult: original research
+ * - WriterResult: previous draft
+ * - String: feedback explaining what must be fixed
+ *
+ * OUTPUT:
+ * - A new WriterResult containing revised content
+ *
+ * This method makes a NEW LLM API request.
+ */
+public WriterResult revise(
+        String topic,
+        String platform,
+        String format,
+        String audience,
+        String tone,
+        String additionalInstructions,
+        ResearchResult research,
+        WriterResult previousDraft,
+        String feedback) {
+
+    return chatClient
+            .prompt()
+            .user("""
+                    Revise the previously generated social media content.
+
+                    ORIGINAL REQUIREMENTS:
+
+                    Topic:
+                    %s
+
+                    Platform:
+                    %s
+
+                    Format:
+                    %s
+
+                    Target Audience:
+                    %s
+
+                    Tone:
+                    %s
+
+                    Additional Instructions:
+                    %s
+
+                    ORIGINAL RESEARCH:
+
+                    Research Summary:
+                    %s
+
+                    Key Facts:
+                    %s
+
+                    Important Concepts:
+                    %s
+
+                    PREVIOUS DRAFT:
+                    %s
+
+                    EDITOR AND FACT-CHECKER FEEDBACK:
+                    %s
+
+                    REVISION INSTRUCTIONS:
+
+                    - Fix all issues identified in the feedback.
+                    - Preserve accurate information from the previous draft.
+                    - Do not invent unsupported facts.
+                    - Follow the original platform, format and tone.
+                    - Produce an improved version of the content.
+                    - Return the revised content using the
+                      required WriterResult structure.
+
+                    """.formatted(
+                    topic,
+                    platform,
+                    format,
+                    audience,
+                    tone,
+                    additionalInstructions,
+                    research.summary(),
+                    research.keyFacts(),
+                    research.importantConcepts(),
+                    previousDraft,
+                    feedback))
+            .call()
+            .entity(WriterResult.class);
+}
+
+
 }
