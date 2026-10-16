@@ -1,16 +1,15 @@
 
 package com.contentforge.backend.service;
 
-// Spring annotation used to register this class as a service bean.
 import org.springframework.stereotype.Service;
 
-// Import the four AI agent classes.
+// Our four AI agents
 import com.contentforge.backend.agent.ResearcherAgent;
 import com.contentforge.backend.agent.WriterAgent;
 import com.contentforge.backend.agent.FactCheckerAgent;
 import com.contentforge.backend.agent.EditorAgent;
 
-// Import the objects returned by the AI agents.
+// Objects returned by our agents
 import com.contentforge.backend.model.ResearchResult;
 import com.contentforge.backend.model.WriterResult;
 import com.contentforge.backend.model.FactCheckResult;
@@ -21,47 +20,29 @@ import com.contentforge.backend.model.PipelineResult;
  * PipelineOrchestrator
  *
  * PURPOSE:
- * Coordinates the execution of our four AI agents.
+ * Controls the execution of our four AI agents.
  *
- * Execution order:
+ * Researcher -> Writer -> FactChecker -> Editor
  *
- * 1. ResearcherAgent
- * 2. WriterAgent
- * 3. FactCheckerAgent
- * 4. EditorAgent
+ * If the Editor requests a revision, the content
+ * is sent back to the Writer.
  *
- * If the Editor requests a revision, the Writer should
- * receive the feedback and generate an improved draft.
- *
- * The revised draft must be checked and reviewed again.
+ * Maximum writing attempts: 3
  */
 @Service
 public class PipelineOrchestrator {
 
-    /*
-     * These variables hold references to our four agents.
-     *
-     * We do not manually create their objects using 'new'.
-     * Spring supplies the objects through dependency injection.
-     *
-     * 'final' means these references cannot be reassigned
-     * after they have been initialized.
-     */
+    // Spring injects these four agent objects.
     private final ResearcherAgent researcherAgent;
     private final WriterAgent writerAgent;
     private final FactCheckerAgent factCheckerAgent;
     private final EditorAgent editorAgent;
 
     /*
-     * CONSTRUCTOR
+     * Constructor Dependency Injection
      *
-     * Spring calls this constructor when creating
-     * the PipelineOrchestrator bean.
-     *
-     * It provides the four agent objects as arguments.
-     *
-     * 'this.researcherAgent' refers to the instance field.
-     * 'researcherAgent' refers to the constructor parameter.
+     * Spring supplies the four agent objects when
+     * creating PipelineOrchestrator.
      */
     public PipelineOrchestrator(
             ResearcherAgent researcherAgent,
@@ -78,18 +59,10 @@ public class PipelineOrchestrator {
     /*
      * generate()
      *
-     * This method receives the user's content requirements.
+     * Executes the complete multi-agent pipeline.
      *
-     * INPUT:
-     * topic                  - Subject of the content
-     * platform               - LinkedIn, Instagram, etc.
-     * format                 - Post, thread, article, etc.
-     * audience               - Target readers
-     * tone                   - Professional, casual, etc.
-     * additionalInstructions - Extra user requirements
-     *
-     * OUTPUT:
-     * PipelineResult containing the results of all four agents.
+     * Returns a PipelineResult containing the
+     * latest output of all four agents.
      */
     public PipelineResult generate(
             String topic,
@@ -102,49 +75,40 @@ public class PipelineOrchestrator {
         /*
          * STEP 1: RESEARCH
          *
-         * Call the Researcher Agent and pass the topic.
-         *
-         * The agent communicates with the LLM and returns
-         * a ResearchResult Java object.
-         *
-         * Research happens once, outside the revision loop.
+         * Research happens once before the loop.
+         * Its result is reused for subsequent revisions.
          */
         ResearchResult research = researcherAgent.research(topic);
 
-        /*
-         * These variables store the latest results.
-         *
-         * We declare them outside the loop so they remain
-         * accessible when constructing PipelineResult.
-         */
+        // Store the latest output from each agent.
         WriterResult writer = null;
         FactCheckResult factCheck = null;
         EditorResult editor = null;
 
-        /*
-         * Maximum number of writing attempts.
-         *
-         * Attempt 1: Original draft
-         * Attempt 2: First revision
-         * Attempt 3: Second revision
-         */
-        int maxAttempts = 3;
+        // Maximum writing attempts, including the original draft.
+        final int maxAttempts = 3;
 
         /*
-         * REVISION LOOP
+         * STEP 2: WRITING AND REVISION LOOP
          *
-         * The Writer, Fact Checker and Editor execute
-         * for each attempt.
+         * Attempt 1 -> Original content
+         * Attempt 2 -> First revision
+         * Attempt 3 -> Second revision
          */
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
 
-            /*
-             * STEP 2: CONTENT WRITING
-             *
-             * On the first attempt, generate the original post.
-             */
+            System.out.println(
+                    "Pipeline writing attempt: " + attempt
+            );
+
             if (attempt == 1) {
 
+                /*
+                 * FIRST ATTEMPT
+                 *
+                 * Generate original content using the
+                 * user requirements and research.
+                 */
                 writer = writerAgent.write(
                         topic,
                         platform,
@@ -158,36 +122,52 @@ public class PipelineOrchestrator {
             } else {
 
                 /*
-                 * REVISION STEP - NOT IMPLEMENTED YET
+                 * REVISION ATTEMPT
                  *
-                 * The Writer must receive:
+                 * Pass the previous draft, original research,
+                 * and Editor feedback to the Writer.
                  *
-                 * 1. Original research
-                 * 2. Previous draft
-                 * 3. Editor feedback
-                 *
-                 * We need the actual revision method from
-                 * WriterAgent before implementing this section.
-                 *
-                 * Do not make another LLM call here until
-                 * the revision method is connected.
+                 * The Writer makes another LLM API call.
                  */
-                break;
+                String feedback = editor.feedback();
+
+                // Include the Editor's individual issues.
+                if (editor.issues() != null
+                        && !editor.issues().isEmpty()) {
+
+                    feedback += "\n\nIssues to fix:\n"
+                            + String.join("\n", editor.issues());
+                }
+
+                writer = writerAgent.revise(
+                        topic,
+                        platform,
+                        format,
+                        audience,
+                        tone,
+                        additionalInstructions,
+                        research,
+                        writer,
+                        feedback
+                );
             }
 
             /*
              * STEP 3: FACT CHECKING
              *
-             * Pass the research and latest Writer output
-             * to the Fact Checker.
+             * Check the latest version of the content.
+             *
+             * This executes again after every revision.
              */
-            factCheck = factCheckerAgent.check(research, writer);
+            factCheck = factCheckerAgent.check(
+                    research,
+                    writer
+            );
 
             /*
              * STEP 4: EDITOR REVIEW
              *
-             * The Editor receives the generated content,
-             * fact-check results, and user requirements.
+             * Review the latest draft and fact-check result.
              */
             editor = editorAgent.review(
                     platform,
@@ -200,35 +180,50 @@ public class PipelineOrchestrator {
             );
 
             /*
-             * APPROVAL CHECK - NOT IMPLEMENTED YET
+             * STEP 5: APPROVAL DECISION
              *
-             * Once we know the exact status field in
-             * EditorResult, we will check whether the
-             * Editor approved the content.
+             * If approved, stop the loop immediately.
              *
-             * If APPROVED:
-             *     break out of the loop.
-             *
-             * If REVISION_REQUIRED:
-             *     continue to the next writing attempt.
-             *
-             * For now, stop after one complete attempt.
+             * Otherwise, continue to the next attempt.
              */
-            break;
+            if (editor != null
+                    && "APPROVED".equalsIgnoreCase(editor.status())) {
+
+                System.out.println(
+                        "Content approved on attempt: " + attempt
+                );
+
+                break;
+            }
+
+            /*
+             * If this was the last attempt, no more
+             * revisions are allowed.
+             */
+            if (attempt == maxAttempts) {
+
+                System.out.println(
+                        "Maximum revision attempts reached."
+                );
+
+            } else {
+
+                System.out.println(
+                        "Editor requested revision."
+                );
+            }
         }
 
         /*
-         * STEP 5: RETURN PIPELINE RESULTS
+         * STEP 6: FINAL RESULT
          *
-         * Combine the outputs of all four agents into
-         * one PipelineResult object.
+         * Return the latest results from all four agents.
          *
-         * The caller can access:
+         * IMPORTANT:
+         * If the Editor did not approve the content,
+         * its status remains REVISION_REQUIRED.
          *
-         * result.research()
-         * result.writer()
-         * result.factCheck()
-         * result.editor()
+         * We do not falsely mark it as APPROVED.
          */
         return new PipelineResult(
                 research,
