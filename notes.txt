@@ -421,3 +421,5 @@ This is the central architectural improvement we made.
 Previously, your controller called all four agents itself.
 Now it delegates that work to PipelineOrchestrator.
 The controller doesn't need to know how research, writing, fact-checking, editing, or revisions are implemented
+
+complete it by tomorrow
