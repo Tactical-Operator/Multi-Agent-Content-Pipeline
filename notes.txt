@@ -422,4 +422,4 @@ Previously, your controller called all four agents itself.
 Now it delegates that work to PipelineOrchestrator.
 The controller doesn't need to know how research, writing, fact-checking, editing, or revisions are implemented
 
-complete it by tomorrow
+complete it by tomorrow.
