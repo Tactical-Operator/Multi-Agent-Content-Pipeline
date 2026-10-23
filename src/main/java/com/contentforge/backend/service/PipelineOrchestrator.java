@@ -3,233 +3,312 @@ package com.contentforge.backend.service;
 
 import org.springframework.stereotype.Service;
 
-// Our four AI agents
 import com.contentforge.backend.agent.ResearcherAgent;
 import com.contentforge.backend.agent.WriterAgent;
 import com.contentforge.backend.agent.FactCheckerAgent;
 import com.contentforge.backend.agent.EditorAgent;
 
-// Objects returned by our agents
 import com.contentforge.backend.model.ResearchResult;
 import com.contentforge.backend.model.WriterResult;
 import com.contentforge.backend.model.FactCheckResult;
 import com.contentforge.backend.model.EditorResult;
 import com.contentforge.backend.model.PipelineResult;
 
-/*
- * PipelineOrchestrator
- *
- * PURPOSE:
- * Controls the execution of our four AI agents.
- *
- * Researcher -> Writer -> FactChecker -> Editor
- *
- * If the Editor requests a revision, the content
- * is sent back to the Writer.
- *
- * Maximum writing attempts: 3
- */
 @Service
 public class PipelineOrchestrator {
 
-    // Spring injects these four agent objects.
-    private final ResearcherAgent researcherAgent;
-    private final WriterAgent writerAgent;
-    private final FactCheckerAgent factCheckerAgent;
-    private final EditorAgent editorAgent;
-
-    /*
-     * Constructor Dependency Injection
-     *
-     * Spring supplies the four agent objects when
-     * creating PipelineOrchestrator.
-     */
-    public PipelineOrchestrator(
-            ResearcherAgent researcherAgent,
-            WriterAgent writerAgent,
-            FactCheckerAgent factCheckerAgent,
-            EditorAgent editorAgent) {
-
-        this.researcherAgent = researcherAgent;
-        this.writerAgent = writerAgent;
-        this.factCheckerAgent = factCheckerAgent;
-        this.editorAgent = editorAgent;
-    }
-
-    /*
-     * generate()
-     *
-     * Executes the complete multi-agent pipeline.
-     *
-     * Returns a PipelineResult containing the
-     * latest output of all four agents.
-     */
-    public PipelineResult generate(
-            String topic,
-            String platform,
-            String format,
-            String audience,
-            String tone,
-            String additionalInstructions) {
+        // Our four AI agents
+        private final ResearcherAgent researcherAgent;
+        private final WriterAgent writerAgent;
+        private final FactCheckerAgent factCheckerAgent;
+        private final EditorAgent editorAgent;
 
         /*
-         * STEP 1: RESEARCH
+         * Constructor Dependency Injection
          *
-         * Research happens once before the loop.
-         * Its result is reused for subsequent revisions.
+         * Spring automatically provides the four agent objects.
          */
-        ResearchResult research = researcherAgent.research(topic);
+        public PipelineOrchestrator(
+                        ResearcherAgent researcherAgent,
+                        WriterAgent writerAgent,
+                        FactCheckerAgent factCheckerAgent,
+                        EditorAgent editorAgent) {
 
-        // Store the latest output from each agent.
-        WriterResult writer = null;
-        FactCheckResult factCheck = null;
-        EditorResult editor = null;
-
-        // Maximum writing attempts, including the original draft.
-        final int maxAttempts = 3;
-
-        /*
-         * STEP 2: WRITING AND REVISION LOOP
-         *
-         * Attempt 1 -> Original content
-         * Attempt 2 -> First revision
-         * Attempt 3 -> Second revision
-         */
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-
-            System.out.println(
-                    "Pipeline writing attempt: " + attempt
-            );
-
-            if (attempt == 1) {
-
-                /*
-                 * FIRST ATTEMPT
-                 *
-                 * Generate original content using the
-                 * user requirements and research.
-                 */
-                writer = writerAgent.write(
-                        topic,
-                        platform,
-                        format,
-                        audience,
-                        tone,
-                        additionalInstructions,
-                        research
-                );
-
-            } else {
-
-                /*
-                 * REVISION ATTEMPT
-                 *
-                 * Pass the previous draft, original research,
-                 * and Editor feedback to the Writer.
-                 *
-                 * The Writer makes another LLM API call.
-                 */
-                String feedback = editor.feedback();
-
-                // Include the Editor's individual issues.
-                if (editor.issues() != null
-                        && !editor.issues().isEmpty()) {
-
-                    feedback += "\n\nIssues to fix:\n"
-                            + String.join("\n", editor.issues());
-                }
-
-                writer = writerAgent.revise(
-                        topic,
-                        platform,
-                        format,
-                        audience,
-                        tone,
-                        additionalInstructions,
-                        research,
-                        writer,
-                        feedback
-                );
-            }
-
-            /*
-             * STEP 3: FACT CHECKING
-             *
-             * Check the latest version of the content.
-             *
-             * This executes again after every revision.
-             */
-            factCheck = factCheckerAgent.check(
-                    research,
-                    writer
-            );
-
-            /*
-             * STEP 4: EDITOR REVIEW
-             *
-             * Review the latest draft and fact-check result.
-             */
-            editor = editorAgent.review(
-                    platform,
-                    format,
-                    audience,
-                    tone,
-                    additionalInstructions,
-                    writer,
-                    factCheck
-            );
-
-            /*
-             * STEP 5: APPROVAL DECISION
-             *
-             * If approved, stop the loop immediately.
-             *
-             * Otherwise, continue to the next attempt.
-             */
-            if (editor != null
-                    && "APPROVED".equalsIgnoreCase(editor.status())) {
-
-                System.out.println(
-                        "Content approved on attempt: " + attempt
-                );
-
-                break;
-            }
-
-            /*
-             * If this was the last attempt, no more
-             * revisions are allowed.
-             */
-            if (attempt == maxAttempts) {
-
-                System.out.println(
-                        "Maximum revision attempts reached."
-                );
-
-            } else {
-
-                System.out.println(
-                        "Editor requested revision."
-                );
-            }
+                this.researcherAgent = researcherAgent;
+                this.writerAgent = writerAgent;
+                this.factCheckerAgent = factCheckerAgent;
+                this.editorAgent = editorAgent;
         }
 
         /*
-         * STEP 6: FINAL RESULT
+         * Executes the complete multi-agent pipeline.
          *
-         * Return the latest results from all four agents.
+         * Researcher -> Writer -> FactChecker -> Editor
          *
-         * IMPORTANT:
-         * If the Editor did not approve the content,
-         * its status remains REVISION_REQUIRED.
+         * If the Editor requests revision:
+         * Writer -> FactChecker -> Editor
          *
-         * We do not falsely mark it as APPROVED.
+         * Maximum writing attempts: 3
          */
-        return new PipelineResult(
-                research,
-                writer,
-                factCheck,
-                editor
-        );
-    }
+        public PipelineResult generate(
+                        String topic,
+                        String platform,
+                        String format,
+                        String audience,
+                        String tone,
+                        String additionalInstructions) {
+
+                // Start measuring total pipeline execution time.
+                long pipelineStart = System.nanoTime();
+
+                /*
+                 * ========================================
+                 * STEP 1: RESEARCH
+                 * ========================================
+                 *
+                 * Research happens only once.
+                 * The same research is reused during revisions.
+                 */
+
+                long researchStart = System.nanoTime();
+
+                ResearchResult research = researcherAgent.research(topic);
+
+                long researchEnd = System.nanoTime();
+
+                System.out.println(
+                                "ResearcherAgent execution time: " +
+                                                (researchEnd - researchStart) / 1_000_000 +
+                                                " ms");
+
+                // Store the latest output from each agent.
+                WriterResult writer = null;
+                FactCheckResult factCheck = null;
+                EditorResult editor = null;
+
+                // Maximum writing attempts, including the first draft.
+                final int maxAttempts = 3;
+
+                /*
+                 * ========================================
+                 * STEP 2: WRITING AND REVISION LOOP
+                 * ========================================
+                 *
+                 * Attempt 1 -> Original draft
+                 * Attempt 2 -> First revision
+                 * Attempt 3 -> Second revision
+                 */
+
+                for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+
+                        System.out.println();
+                        System.out.println("==================================");
+                        System.out.println("Pipeline writing attempt: " + attempt);
+                        System.out.println("==================================");
+
+                        /*
+                         * ========================================
+                         * STEP 2A: WRITER AGENT
+                         * ========================================
+                         */
+
+                        long writerStart = System.nanoTime();
+
+                        if (attempt == 1) {
+
+                                // Generate the original draft.
+                                writer = writerAgent.write(
+                                                topic,
+                                                platform,
+                                                format,
+                                                audience,
+                                                tone,
+                                                additionalInstructions,
+                                                research);
+
+                        } else {
+
+                                /*
+                                 * Revise the previous draft using
+                                 * Editor feedback and issues.
+                                 */
+
+                                String feedback = editor.feedback();
+
+                                if (editor.issues() != null
+                                                && !editor.issues().isEmpty()) {
+
+                                        feedback += "\n\nIssues to fix:\n"
+                                                        + String.join("\n", editor.issues());
+                                }
+
+                                writer = writerAgent.revise(
+                                                topic,
+                                                platform,
+                                                format,
+                                                audience,
+                                                tone,
+                                                additionalInstructions,
+                                                research,
+                                                writer,
+                                                feedback);
+                        }
+
+                        long writerEnd = System.nanoTime();
+
+                        System.out.println(
+                                        "Attempt " + attempt +
+                                                        " - WriterAgent execution time: " +
+                                                        (writerEnd - writerStart) / 1_000_000 +
+                                                        " ms");
+
+                        /*
+                         * ========================================
+                         * STEP 3: FACT CHECKER AGENT
+                         * ========================================
+                         *
+                         * Checks the latest version of the content.
+                         * Runs again after every revision.
+                         */
+
+                        long factCheckStart = System.nanoTime();
+
+                        factCheck = factCheckerAgent.check(
+                                        research,
+                                        writer);
+
+                        long factCheckEnd = System.nanoTime();
+
+                        System.out.println(
+                                        "Attempt " + attempt +
+                                                        " - FactCheckerAgent execution time: " +
+                                                        (factCheckEnd - factCheckStart) / 1_000_000 +
+                                                        " ms");
+                        System.out.println();
+                        System.out.println("----- FACT CHECK REVIEW -----");
+
+                        System.out.println(
+                                        "Factually Correct: " + factCheck.factuallyCorrect());
+
+                        System.out.println(
+                                        "Fact Check Issues: " + factCheck.issues());
+
+                        System.out.println(
+                                        "Fact Check Recommendations: " + factCheck.recommendations());
+
+                        System.out.println("-----------------------------");
+
+                        /*
+                         * ========================================
+                         * STEP 4: EDITOR AGENT
+                         * ========================================
+                         *
+                         * Reviews the latest draft and
+                         * the FactChecker's findings.
+                         */
+
+                        long editorStart = System.nanoTime();
+
+                        editor = editorAgent.review(
+                                        platform,
+                                        format,
+                                        audience,
+                                        tone,
+                                        additionalInstructions,
+                                        writer,
+                                        factCheck);
+
+                        long editorEnd = System.nanoTime();
+
+                        System.out.println(
+                                        "Attempt " + attempt +
+                                                        " - EditorAgent execution time: " +
+                                                        (editorEnd - editorStart) / 1_000_000 +
+                                                        " ms");
+                        /*
+                         * ========================================
+                         * EDITOR DECISION DEBUG LOGS
+                         * ========================================
+                         *
+                         * Display why the Editor approved or
+                         * rejected the current draft.
+                         */
+
+                        System.out.println();
+                        System.out.println("----- EDITOR REVIEW -----");
+
+                        System.out.println(
+                                        "Attempt: " + attempt);
+
+                        System.out.println(
+                                        "Editor Status: " + editor.status());
+
+                        System.out.println(
+                                        "Editor Issues: " + editor.issues());
+
+                        System.out.println(
+                                        "Editor Feedback: " + editor.feedback());
+
+                        System.out.println("-------------------------");
+
+                        /*
+                         * ========================================
+                         * STEP 5: APPROVAL DECISION
+                         * ========================================
+                         */
+
+                        if (editor != null
+                                        && "APPROVED".equalsIgnoreCase(editor.status())) {
+
+                                System.out.println(
+                                                "Content approved on attempt: " + attempt);
+
+                                break;
+                        }
+
+                        if (attempt == maxAttempts) {
+
+                                System.out.println(
+                                                "Maximum revision attempts reached.");
+
+                        } else {
+
+                                System.out.println(
+                                                "Editor requested revision.");
+                        }
+                }
+
+                /*
+                 * ========================================
+                 * STEP 6: TOTAL EXECUTION TIME
+                 * ========================================
+                 */
+
+                long pipelineEnd = System.nanoTime();
+
+                System.out.println();
+                System.out.println("==================================");
+                System.out.println(
+                                "TOTAL PIPELINE TIME: " +
+                                                (pipelineEnd - pipelineStart) / 1_000_000 +
+                                                " ms");
+                System.out.println("==================================");
+
+                /*
+                 * ========================================
+                 * STEP 7: RETURN FINAL RESULT
+                 * ========================================
+                 *
+                 * Return the latest results from all four agents.
+                 *
+                 * The Editor's status is preserved even if
+                 * the maximum revision attempts are reached.
+                 */
+
+                return new PipelineResult(
+                                research,
+                                writer,
+                                factCheck,
+                                editor);
+        }
 }
